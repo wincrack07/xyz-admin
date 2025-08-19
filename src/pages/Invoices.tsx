@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
-import { Plus, Search, FileText, Calendar, DollarSign, Users, Eye, Edit, Trash2, MoreHorizontal, Send, Link as LinkIcon, Download, Copy, ExternalLink } from 'lucide-react'
+import { Plus, Search, FileText, Calendar, DollarSign, Edit, Trash2, MoreHorizontal, Send, Link as LinkIcon, Download, Copy, ExternalLink, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -27,9 +28,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Badge } from '@/components/ui/badge'
+
 import { useToast } from '@/hooks/use-toast'
-import { useNMI } from '@/hooks/useNMI'
+
 import { InvoiceDialog } from '@/components/invoices/InvoiceDialog'
 import { DeleteInvoiceDialog } from '@/components/invoices/DeleteInvoiceDialog'
 import { PaymentStatusBadge } from '@/components/invoices/PaymentStatusBadge'
@@ -41,12 +42,15 @@ interface Invoice {
   client_id: string
   issue_date: string
   due_date: string
-  status: 'draft' | 'sent' | 'pending' | 'paid' | 'partial' | 'failed' | 'refunded' | 'void' | 'chargeback'
+  status: 'cotizacion' | 'sent' | 'pending' | 'paid' | 'partial' | 'failed' | 'refunded' | 'void' | 'chargeback' | 'payment_review' | 'payment_approved'
   currency: string
   subtotal: number
   tax: number
   total: number
-  payment_link_url?: string
+  payment_method?: 'credit_card' | 'ach'
+  down_payment_amount?: number
+  ach_screenshot_url?: string
+  payment_review_notes?: string
   notes?: string
   client: {
     display_name: string
@@ -55,12 +59,19 @@ interface Invoice {
   conciliation_status?: 'pending' | 'partial' | 'complete' | 'cancelled'
   conciliated_amount?: number
   created_at: string
+  // Editability info
+  can_edit?: boolean
+  can_revert_to_cotizacion?: boolean
+  requires_credit_note?: boolean
+  payment_count?: number
+  total_paid?: number
 }
 
 export const Invoices = () => {
   const { user } = useAuth()
   const { toast } = useToast()
-  const { copyPaymentLink, openPaymentLink } = useNMI()
+  const navigate = useNavigate()
+
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -104,7 +115,10 @@ export const Invoices = () => {
           subtotal,
           tax,
           total,
-          payment_link_url,
+          payment_method,
+          down_payment_amount,
+          ach_screenshot_url,
+          payment_review_notes,
           notes,
           conciliation_status,
           conciliated_amount,
@@ -117,34 +131,58 @@ export const Invoices = () => {
 
       // Apply status filter
       if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter)
+        query = query.eq('status', statusFilter as Invoice['status'])
       }
 
       const { data, error } = await query.order('created_at', { ascending: false })
 
       if (error) throw error
 
-      // Transform data
-      const transformedInvoices: Invoice[] = (data || []).map(inv => ({
-        id: inv.id,
-        series: inv.series,
-        number: inv.number,
-        client_id: inv.client_id,
-        issue_date: inv.issue_date,
-        due_date: inv.due_date,
-        status: inv.status,
-        currency: inv.currency,
-        subtotal: parseFloat(inv.subtotal.toString()),
-        tax: parseFloat(inv.tax.toString()),
-        total: parseFloat(inv.total.toString()),
-        payment_link_url: inv.payment_link_url,
-        notes: inv.notes,
-        conciliation_status: inv.conciliation_status,
-        conciliated_amount: inv.conciliated_amount ? parseFloat(inv.conciliated_amount.toString()) : undefined,
-        created_at: inv.created_at,
-        client: {
-          display_name: inv.clients?.display_name || '',
-          legal_name: inv.clients?.legal_name
+      // Transform data and get editability info
+      const transformedInvoices: Invoice[] = await Promise.all((data || []).map(async (inv) => {
+        // Get editability info for each invoice
+        const { data: editabilityData } = await supabase
+          .rpc('get_invoice_editability', { p_invoice_id: inv.id })
+
+        const editability = (editabilityData as any)?.[0] || {
+          can_edit: false,
+          can_revert_to_cotizacion: false,
+          requires_credit_note: false,
+          current_status: inv.status,
+          payment_count: 0,
+          total_paid: 0
+        }
+
+        return {
+          id: inv.id,
+          series: inv.series,
+          number: inv.number,
+          client_id: inv.client_id,
+          issue_date: inv.issue_date,
+          due_date: inv.due_date,
+          status: inv.status as Invoice['status'],
+          currency: inv.currency,
+          subtotal: parseFloat(inv.subtotal.toString()),
+          tax: parseFloat(inv.tax.toString()),
+          total: parseFloat(inv.total.toString()),
+          payment_method: inv.payment_method as 'credit_card' | 'ach' | undefined,
+          down_payment_amount: inv.down_payment_amount ? parseFloat(inv.down_payment_amount.toString()) : undefined,
+          ach_screenshot_url: inv.ach_screenshot_url || undefined,
+          payment_review_notes: inv.payment_review_notes || undefined,
+          notes: inv.notes || undefined,
+          conciliation_status: inv.conciliation_status || undefined,
+          conciliated_amount: inv.conciliated_amount ? parseFloat(inv.conciliated_amount.toString()) : undefined,
+          created_at: inv.created_at,
+          client: {
+            display_name: inv.clients?.display_name || '',
+            legal_name: inv.clients?.legal_name || undefined
+          },
+          // Editability info
+          can_edit: editability.can_edit,
+          can_revert_to_cotizacion: editability.can_revert_to_cotizacion,
+          requires_credit_note: editability.requires_credit_note,
+          payment_count: editability.payment_count,
+          total_paid: parseFloat(editability.total_paid.toString())
         }
       }))
 
@@ -193,36 +231,7 @@ export const Invoices = () => {
     }).format(amount)
   }
 
-  const getStatusBadge = (status: Invoice['status']) => {
-    const statusConfig = {
-      draft: { label: 'Borrador', className: 'bg-gray-100 text-gray-800' },
-      sent: { label: 'Enviada', className: 'bg-blue-100 text-blue-800' },
-      pending: { label: 'Pendiente', className: 'bg-yellow-100 text-yellow-800' },
-      paid: { label: 'Pagada', className: 'bg-green-100 text-green-800' },
-      partial: { label: 'Parcial', className: 'bg-orange-100 text-orange-800' },
-      failed: { label: 'Fallida', className: 'bg-red-100 text-red-800' },
-      refunded: { label: 'Reembolsada', className: 'bg-purple-100 text-purple-800' },
-      void: { label: 'Anulada', className: 'bg-gray-100 text-gray-800' },
-      chargeback: { label: 'Contracargo', className: 'bg-red-100 text-red-800' }
-    }
-    
-    const config = statusConfig[status] || statusConfig.draft
-    return <Badge className={config.className}>{config.label}</Badge>
-  }
 
-  const getConciliationBadge = (status?: Invoice['conciliation_status']) => {
-    if (!status) return null
-    
-    const statusConfig = {
-      pending: { label: 'Pendiente', className: 'bg-yellow-100 text-yellow-800' },
-      partial: { label: 'Parcial', className: 'bg-orange-100 text-orange-800' },
-      complete: { label: 'Completa', className: 'bg-green-100 text-green-800' },
-      cancelled: { label: 'Cancelada', className: 'bg-gray-100 text-gray-800' }
-    }
-    
-    const config = statusConfig[status] || statusConfig.pending
-    return <Badge variant="outline" className={config.className}>{config.label}</Badge>
-  }
 
   const handleNewInvoice = () => {
     setSelectedInvoice(null)
@@ -243,7 +252,49 @@ export const Invoices = () => {
     loadInvoices()
   }
 
-  const handleSendInvoice = async (invoice: Invoice) => {
+  const handleRevertToCotizacion = async (invoice: Invoice) => {
+    try {
+      const { data, error } = await supabase
+        .rpc('revert_invoice_to_cotizacion', { p_invoice_id: invoice.id })
+
+      if (error) throw error
+
+      if (data) {
+        toast({
+          title: 'Estado actualizado',
+          description: 'La factura ha sido revertida a cotización.',
+        })
+        loadInvoices()
+      } else {
+        toast({
+          title: 'Error',
+          description: 'No se puede revertir una factura que tiene pagos.',
+          variant: 'destructive',
+        })
+      }
+    } catch (error) {
+      console.error('Error reverting invoice:', error)
+      toast({
+        title: 'Error',
+        description: 'No se pudo revertir la factura.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleCreateCreditNote = (_invoice: Invoice) => {
+    // TODO: Implement credit note creation
+    toast({
+      title: 'Funcionalidad pendiente',
+      description: 'La creación de notas de crédito se implementará próximamente.',
+    })
+  }
+
+  const handleViewInvoice = (invoice: Invoice) => {
+    navigate(`/invoices/${invoice.id}`)
+  }
+
+  const handleSendInvoice = async () => {
     // TODO: Implement email sending
     toast({
       title: 'Funcionalidad pendiente',
@@ -252,22 +303,15 @@ export const Invoices = () => {
   }
 
   const handleCopyPaymentLink = async (invoice: Invoice) => {
-    if (!invoice.payment_link_url) {
-      toast({
-        title: 'Sin enlace de pago',
-        description: 'Esta factura no tiene un enlace de pago generado.',
-        variant: 'destructive',
-      })
-      return
-    }
-
+    const publicUrl = `${window.location.origin}/invoice/${invoice.id}`
+    
     try {
-      await navigator.clipboard.writeText(invoice.payment_link_url)
+      await navigator.clipboard.writeText(publicUrl)
       toast({
         title: 'Enlace copiado',
-        description: 'El enlace de pago se copió al portapapeles.',
+        description: 'El enlace público se copió al portapapeles.',
       })
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'No se pudo copiar el enlace.',
@@ -276,7 +320,7 @@ export const Invoices = () => {
     }
   }
 
-  const handleDownloadPDF = (invoice: Invoice) => {
+  const handleDownloadPDF = () => {
     // TODO: Implement PDF generation
     toast({
       title: 'Funcionalidad pendiente',
@@ -382,13 +426,15 @@ export const Invoices = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos los estados</SelectItem>
-                <SelectItem value="draft">Borrador</SelectItem>
+                <SelectItem value="cotizacion">Cotización</SelectItem>
                 <SelectItem value="sent">Enviada</SelectItem>
                 <SelectItem value="pending">Pendiente</SelectItem>
                 <SelectItem value="paid">Pagada</SelectItem>
                 <SelectItem value="partial">Parcial</SelectItem>
                 <SelectItem value="failed">Fallida</SelectItem>
                 <SelectItem value="void">Anulada</SelectItem>
+                <SelectItem value="payment_review">En Revisión</SelectItem>
+                <SelectItem value="payment_approved">Aprobada</SelectItem>
               </SelectContent>
             </Select>
             <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
@@ -417,7 +463,7 @@ export const Invoices = () => {
                   <TableHead>Fecha</TableHead>
                   <TableHead>Vencimiento</TableHead>
                   <TableHead>Estado</TableHead>
-                  <TableHead>Pago</TableHead>
+                  <TableHead>Enlace Público</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead className="w-[50px]">Acciones</TableHead>
                 </TableRow>
@@ -445,33 +491,39 @@ export const Invoices = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <PaymentStatusBadge status={invoice.status} />
+                      <PaymentStatusBadge status={invoice.status as any} />
                     </TableCell>
                     <TableCell>
-                      {invoice.payment_link_url ? (
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => copyPaymentLink(invoice.payment_link_url!)}
-                            className="h-8 w-8 p-0"
-                            title="Copiar link de pago"
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openPaymentLink(invoice.payment_link_url!)}
-                            className="h-8 w-8 p-0"
-                            title="Abrir link de pago"
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">Sin link</span>
-                      )}
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const publicUrl = `${window.location.origin}/invoice/${invoice.id}`
+                            navigator.clipboard.writeText(publicUrl)
+                            toast({
+                              title: 'Enlace copiado',
+                              description: 'Enlace público copiado al portapapeles.',
+                            })
+                          }}
+                          className="h-8 w-8 p-0"
+                          title="Copiar enlace público"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            const publicUrl = `${window.location.origin}/invoice/${invoice.id}`
+                            window.open(publicUrl, '_blank')
+                          }}
+                          className="h-8 w-8 p-0"
+                          title="Abrir enlace público"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="font-medium">
@@ -492,24 +544,64 @@ export const Invoices = () => {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleEditInvoice(invoice)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Editar
+                          {/* View details - always available */}
+                          <DropdownMenuItem onClick={() => handleViewInvoice(invoice)}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            Ver Detalles
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleSendInvoice(invoice)}>
+                          
+                          <DropdownMenuSeparator />
+                          
+                          {/* Edit option - only if can_edit is true */}
+                          {invoice.can_edit && (
+                            <DropdownMenuItem onClick={() => handleEditInvoice(invoice)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Editar
+                            </DropdownMenuItem>
+                          )}
+                          
+                          {/* Revert to cotizacion option */}
+                          {invoice.can_revert_to_cotizacion && (
+                            <DropdownMenuItem onClick={() => handleRevertToCotizacion(invoice)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Revertir a Cotización
+                            </DropdownMenuItem>
+                          )}
+                          
+                          {/* Credit note option - if requires_credit_note */}
+                          {invoice.requires_credit_note && (
+                            <DropdownMenuItem onClick={() => handleCreateCreditNote(invoice)}>
+                              <FileText className="mr-2 h-4 w-4" />
+                              Crear Nota de Crédito
+                            </DropdownMenuItem>
+                          )}
+                          
+                          <DropdownMenuSeparator />
+                          
+                          <DropdownMenuItem onClick={() => handleSendInvoice()}>
                             <Send className="mr-2 h-4 w-4" />
                             Enviar por Email
                           </DropdownMenuItem>
-                          {invoice.payment_link_url && (
-                            <DropdownMenuItem onClick={() => handleCopyPaymentLink(invoice)}>
-                              <LinkIcon className="mr-2 h-4 w-4" />
-                              Copiar Enlace de Pago
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem onClick={() => handleDownloadPDF(invoice)}>
+                          <DropdownMenuItem onClick={() => handleCopyPaymentLink(invoice)}>
+                            <LinkIcon className="mr-2 h-4 w-4" />
+                            Copiar Enlace Público
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDownloadPDF()}>
                             <Download className="mr-2 h-4 w-4" />
                             Descargar PDF
                           </DropdownMenuItem>
+                          
+                          {/* Show payment info if has payments */}
+                          {invoice.payment_count && invoice.payment_count > 0 && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem disabled>
+                                <DollarSign className="mr-2 h-4 w-4" />
+                                Pagos: {invoice.payment_count} (${invoice.total_paid?.toFixed(2)})
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
                             onClick={() => handleDeleteInvoice(invoice)}

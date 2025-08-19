@@ -373,6 +373,7 @@ export type Database = {
       }
       invoices: {
         Row: {
+          ach_screenshot_url: string | null
           client_id: string
           conciliated_amount: number | null
           conciliation_status:
@@ -380,6 +381,7 @@ export type Database = {
             | null
           created_at: string
           currency: string
+          down_payment_amount: number | null
           due_date: string
           fx_rate: number | null
           id: string
@@ -390,6 +392,8 @@ export type Database = {
           number: number
           owner_user_id: string
           payment_link_url: string | null
+          payment_method: string | null
+          payment_review_notes: string | null
           series: string
           status: Database["public"]["Enums"]["invoice_status"]
           subtotal: number
@@ -397,6 +401,7 @@ export type Database = {
           total: number
         }
         Insert: {
+          ach_screenshot_url?: string | null
           client_id: string
           conciliated_amount?: number | null
           conciliation_status?:
@@ -404,6 +409,7 @@ export type Database = {
             | null
           created_at?: string
           currency: string
+          down_payment_amount?: number | null
           due_date: string
           fx_rate?: number | null
           id?: string
@@ -414,6 +420,8 @@ export type Database = {
           number: number
           owner_user_id: string
           payment_link_url?: string | null
+          payment_method?: string | null
+          payment_review_notes?: string | null
           series?: string
           status?: Database["public"]["Enums"]["invoice_status"]
           subtotal?: number
@@ -421,6 +429,7 @@ export type Database = {
           total?: number
         }
         Update: {
+          ach_screenshot_url?: string | null
           client_id?: string
           conciliated_amount?: number | null
           conciliation_status?:
@@ -428,6 +437,7 @@ export type Database = {
             | null
           created_at?: string
           currency?: string
+          down_payment_amount?: number | null
           due_date?: string
           fx_rate?: number | null
           id?: string
@@ -438,6 +448,8 @@ export type Database = {
           number?: number
           owner_user_id?: string
           payment_link_url?: string | null
+          payment_method?: string | null
+          payment_review_notes?: string | null
           series?: string
           status?: Database["public"]["Enums"]["invoice_status"]
           subtotal?: number
@@ -655,11 +667,8 @@ export type Database = {
           full_name: string | null
           id: string
           nmi_api_key: string | null
-          nmi_merchant_id: string | null
-          nmi_password: string | null
           nmi_sandbox_mode: boolean | null
           nmi_security_key: string | null
-          nmi_username: string | null
           preferences: Json | null
           timezone: string
         }
@@ -672,11 +681,8 @@ export type Database = {
           full_name?: string | null
           id: string
           nmi_api_key?: string | null
-          nmi_merchant_id?: string | null
-          nmi_password?: string | null
           nmi_sandbox_mode?: boolean | null
           nmi_security_key?: string | null
-          nmi_username?: string | null
           preferences?: Json | null
           timezone?: string
         }
@@ -689,11 +695,8 @@ export type Database = {
           full_name?: string | null
           id?: string
           nmi_api_key?: string | null
-          nmi_merchant_id?: string | null
-          nmi_password?: string | null
           nmi_sandbox_mode?: boolean | null
           nmi_security_key?: string | null
-          nmi_username?: string | null
           preferences?: Json | null
           timezone?: string
         }
@@ -863,6 +866,21 @@ export type Database = {
       }
     }
     Functions: {
+      can_edit_invoice: {
+        Args: { p_invoice_id: string }
+        Returns: boolean
+      }
+      get_invoice_editability: {
+        Args: { p_invoice_id: string }
+        Returns: {
+          can_edit: boolean
+          can_revert_to_cotizacion: boolean
+          current_status: string
+          payment_count: number
+          requires_credit_note: boolean
+          total_paid: number
+        }[]
+      }
       get_next_invoice_number: {
         Args: { p_owner_user_id: string; p_series: string }
         Returns: number
@@ -870,12 +888,21 @@ export type Database = {
       get_nmi_credentials: {
         Args: { user_id: string }
         Returns: {
-          nmi_merchant_id: string
-          nmi_password: string
           nmi_sandbox_mode: boolean
           nmi_security_key: string
-          nmi_username: string
         }[]
+      }
+      is_invoice_publicly_accessible: {
+        Args: { invoice_id: string }
+        Returns: boolean
+      }
+      revert_invoice_to_cotizacion: {
+        Args: { p_invoice_id: string }
+        Returns: boolean
+      }
+      update_invoice_status_for_ach_payment: {
+        Args: { p_invoice_id: string; p_screenshot_url: string }
+        Returns: boolean
       }
     }
     Enums: {
@@ -886,7 +913,7 @@ export type Database = {
         | "manual_income"
         | "subscription_payment"
       invoice_status:
-        | "draft"
+        | "cotizacion"
         | "sent"
         | "pending"
         | "paid"
@@ -895,6 +922,8 @@ export type Database = {
         | "refunded"
         | "void"
         | "chargeback"
+        | "payment_review"
+        | "payment_approved"
       notification_channel: "email"
       notification_type:
         | "invoice_created"
@@ -1045,7 +1074,7 @@ export const Constants = {
         "subscription_payment",
       ],
       invoice_status: [
-        "draft",
+        "cotizacion",
         "sent",
         "pending",
         "paid",
@@ -1054,6 +1083,8 @@ export const Constants = {
         "refunded",
         "void",
         "chargeback",
+        "payment_review",
+        "payment_approved",
       ],
       notification_channel: ["email"],
       notification_type: [

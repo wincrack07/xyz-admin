@@ -14,6 +14,8 @@ import { Income } from './pages/Income'
 import { Conciliation } from './pages/Conciliation'
 import { BankAccounts } from './pages/BankAccounts'
 import { BankImport } from './pages/BankImport'
+import { InvoiceView } from './pages/public/InvoiceView'
+import { InvoiceDetail } from './pages/InvoiceDetail'
 import { Toaster } from '@/components/ui/toaster'
 
 // Protected Route component
@@ -45,6 +47,10 @@ const AppContent = () => {
 
   return (
     <Routes>
+      {/* Public routes */}
+      <Route path="/invoice/:invoiceId" element={<InvoiceView />} />
+      
+      {/* Protected routes */}
       <Route 
         path="/login" 
         element={user ? <Navigate to="/" /> : <LoginForm />} 
@@ -59,6 +65,7 @@ const AppContent = () => {
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/clients" element={<Clients />} />
                 <Route path="/invoices" element={<Invoices />} />
+                <Route path="/invoices/:id" element={<InvoiceDetail />} />
                 <Route path="/products-services" element={<ProductsServices />} />
                 <Route path="/expenses" element={<Expenses />} />
                 <Route path="/income" element={<Income />} />

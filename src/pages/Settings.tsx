@@ -15,7 +15,8 @@ interface Profile {
   default_currency: string
   timezone: string
   email_from: string | null
-  nmi_api_key: string | null
+  nmi_security_key: string | null
+  nmi_sandbox_mode: boolean
   email_provider_api_key: string | null
   preferences: any
 }
@@ -41,7 +42,8 @@ export const Settings = () => {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
-  const [showNmiKey, setShowNmiKey] = useState(false)
+  const [showNmiSecurityKey, setShowNmiSecurityKey] = useState(false)
+  const [showNmiPassword, setShowNmiPassword] = useState(false)
   const [showEmailKey, setShowEmailKey] = useState(false)
 
   useEffect(() => {
@@ -68,13 +70,14 @@ export const Settings = () => {
       } else {
         // Create initial profile if it doesn't exist
         const newProfile = {
-          id: user?.id,
+          id: user?.id!,
           full_name: user?.user_metadata?.full_name || '',
           company_name: user?.user_metadata?.company_name || '',
           default_currency: 'USD',
           timezone: 'America/Panama',
           email_from: user?.email || '',
-          nmi_api_key: null,
+          nmi_security_key: null,
+          nmi_sandbox_mode: true,
           email_provider_api_key: null,
           preferences: {}
         }
@@ -86,7 +89,7 @@ export const Settings = () => {
           .single()
 
         if (createError) throw createError
-        setProfile(createdProfile)
+        setProfile(createdProfile as Profile)
       }
     } catch (error) {
       console.error('Error loading profile:', error)
@@ -112,10 +115,11 @@ export const Settings = () => {
           default_currency: profile.default_currency,
           timezone: profile.timezone,
           email_from: profile.email_from,
-          nmi_api_key: profile.nmi_api_key,
+          nmi_security_key: profile.nmi_security_key,
+          nmi_sandbox_mode: profile.nmi_sandbox_mode,
           email_provider_api_key: profile.email_provider_api_key,
         })
-        .eq('id', user?.id)
+        .eq('id', user?.id!)
 
       if (error) throw error
 
@@ -245,14 +249,14 @@ export const Settings = () => {
           <CardContent>
             <div className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="nmi_api_key">NMI API Key</Label>
+                <Label htmlFor="nmi_security_key">NMI Security Key</Label>
                 <div className="relative">
                   <Input
-                    id="nmi_api_key"
-                    type={showNmiKey ? 'text' : 'password'}
-                    value={profile.nmi_api_key || ''}
-                    onChange={(e) => setProfile({ ...profile, nmi_api_key: e.target.value })}
-                    placeholder="Ingresa tu NMI API Key"
+                    id="nmi_security_key"
+                    type={showNmiSecurityKey ? 'text' : 'password'}
+                    value={profile.nmi_security_key || ''}
+                    onChange={(e) => setProfile({ ...profile, nmi_security_key: e.target.value })}
+                    placeholder="Ingresa tu NMI Security Key"
                     className="pr-10"
                   />
                   <Button
@@ -260,12 +264,31 @@ export const Settings = () => {
                     variant="ghost"
                     size="sm"
                     className="absolute right-0 top-0 h-full px-3"
-                    onClick={() => setShowNmiKey(!showNmiKey)}
+                    onClick={() => setShowNmiSecurityKey(!showNmiSecurityKey)}
                   >
-                    {showNmiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showNmiSecurityKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">Clave API para procesar pagos con NMI</p>
+                <p className="text-xs text-muted-foreground">Clave de seguridad para procesar pagos con NMI</p>
+              </div>
+              
+
+              
+              <div className="space-y-2">
+                <Label htmlFor="nmi_sandbox_mode">Modo Sandbox</Label>
+                <Select
+                  value={profile.nmi_sandbox_mode ? 'true' : 'false'}
+                  onValueChange={(v) => setProfile({ ...profile, nmi_sandbox_mode: v === 'true' })}
+                >
+                  <SelectTrigger id="nmi_sandbox_mode">
+                    <SelectValue placeholder="Selecciona modo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="true">Sandbox (Pruebas)</SelectItem>
+                    <SelectItem value="false">Producción</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Usar modo sandbox para pruebas</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email_provider_api_key">Email Provider API Key (Resend/SendGrid)</Label>

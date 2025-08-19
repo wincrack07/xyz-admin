@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 
-interface PaymentLinkOptions {
+interface PaymentOptions {
   invoice_id: string
   amount: number
   currency: string
@@ -10,7 +10,7 @@ interface PaymentLinkOptions {
     first_name: string
     last_name: string
     email: string
-    phone?: string
+    phone: string
     address?: {
       line1?: string
       city?: string
@@ -18,6 +18,11 @@ interface PaymentLinkOptions {
       zip?: string
       country?: string
     }
+  }
+  payment: {
+    ccnumber: string
+    ccexp: string
+    cvv: string
   }
   description: string
 }
@@ -33,21 +38,12 @@ export const useNMI = () => {
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
 
-  const generatePaymentLink = async (options: PaymentLinkOptions): Promise<PaymentLinkResponse> => {
+  const processPayment = async (options: PaymentOptions): Promise<PaymentLinkResponse> => {
     try {
       setLoading(true)
 
-      // Get the current app URL for redirect and webhook URLs
-      const baseUrl = window.location.origin
-      const redirectUrl = `${baseUrl}/invoices/${options.invoice_id}/payment-success`
-      const webhookUrl = `${import.meta.env.VITE_SUPABASE_URL || 'https://ohpzqbcgajugxwlbtnmp.supabase.co'}/functions/v1/nmi-webhook`
-
       const { data, error } = await supabase.functions.invoke('generate-nmi-payment-link', {
-        body: {
-          ...options,
-          redirect_url: redirectUrl,
-          webhook_url: webhookUrl,
-        },
+        body: options,
       })
 
       if (error) {
@@ -55,45 +51,23 @@ export const useNMI = () => {
       }
 
       if (!data.success) {
-        throw new Error(data.error || 'Failed to generate payment link')
-      }
-
-      // Update invoice with payment link URL
-      const { error: updateError } = await supabase
-        .from('invoices')
-        .update({
-          payment_link_url: data.payment_url,
-          nmi_payment_id: data.transaction_id,
-          status: 'sent',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', options.invoice_id)
-
-      if (updateError) {
-        console.error('Error updating invoice with payment link:', updateError)
-        // Don't throw here as the payment link was created successfully
-        toast({
-          title: 'Advertencia',
-          description: 'Link de pago creado, pero no se pudo actualizar la factura.',
-          variant: 'destructive',
-        })
+        throw new Error(data.error || 'Failed to process payment')
       }
 
       toast({
         title: 'Éxito',
-        description: 'Link de pago generado correctamente.',
+        description: 'Pago procesado correctamente.',
       })
 
       return {
         success: true,
-        payment_url: data.payment_url,
         transaction_id: data.transaction_id
       }
 
     } catch (error) {
-      console.error('Error generating payment link:', error)
+      console.error('Error processing payment:', error)
       
-      const errorMessage = error.message || 'Error al generar el link de pago'
+      const errorMessage = error instanceof Error ? error.message : 'Error al procesar el pago'
       toast({
         title: 'Error',
         description: errorMessage,
@@ -169,7 +143,7 @@ export const useNMI = () => {
 
   return {
     loading,
-    generatePaymentLink,
+    processPayment,
     copyPaymentLink,
     openPaymentLink,
     sendPaymentLinkByEmail
