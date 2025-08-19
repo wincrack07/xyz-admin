@@ -168,7 +168,7 @@ export const InvoiceDetail = () => {
         can_revert_to_cotizacion: editability.can_revert_to_cotizacion,
         requires_credit_note: editability.requires_credit_note,
         payment_count: editability.payment_count,
-        total_paid: parseFloat(editability.total_paid.toString())
+        total_paid: editability.total_paid ? parseFloat(editability.total_paid.toString()) : 0
       }
 
       setInvoice(transformedInvoice)
