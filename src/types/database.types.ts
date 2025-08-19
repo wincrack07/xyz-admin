@@ -655,6 +655,11 @@ export type Database = {
           full_name: string | null
           id: string
           nmi_api_key: string | null
+          nmi_merchant_id: string | null
+          nmi_password: string | null
+          nmi_sandbox_mode: boolean | null
+          nmi_security_key: string | null
+          nmi_username: string | null
           preferences: Json | null
           timezone: string
         }
@@ -667,6 +672,11 @@ export type Database = {
           full_name?: string | null
           id: string
           nmi_api_key?: string | null
+          nmi_merchant_id?: string | null
+          nmi_password?: string | null
+          nmi_sandbox_mode?: boolean | null
+          nmi_security_key?: string | null
+          nmi_username?: string | null
           preferences?: Json | null
           timezone?: string
         }
@@ -679,6 +689,11 @@ export type Database = {
           full_name?: string | null
           id?: string
           nmi_api_key?: string | null
+          nmi_merchant_id?: string | null
+          nmi_password?: string | null
+          nmi_sandbox_mode?: boolean | null
+          nmi_security_key?: string | null
+          nmi_username?: string | null
           preferences?: Json | null
           timezone?: string
         }
@@ -851,6 +866,16 @@ export type Database = {
       get_next_invoice_number: {
         Args: { p_owner_user_id: string; p_series: string }
         Returns: number
+      }
+      get_nmi_credentials: {
+        Args: { user_id: string }
+        Returns: {
+          nmi_merchant_id: string
+          nmi_password: string
+          nmi_sandbox_mode: boolean
+          nmi_security_key: string
+          nmi_username: string
+        }[]
       }
     }
     Enums: {
