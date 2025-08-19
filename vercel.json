@@ -7,5 +7,11 @@
     "env": {
       "SKIP_TYPE_CHECK": "true"
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }
