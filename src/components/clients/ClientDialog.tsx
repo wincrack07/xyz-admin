@@ -40,6 +40,7 @@ const clientSchema = z.object({
   display_name: z.string().min(1, 'El nombre es requerido'),
   legal_name: z.string().optional(),
   tax_id: z.string().optional(),
+  phone: z.string().optional(),
   emails: z.array(z.string().email('Email inválido')).min(1, 'Al menos un email es requerido'),
   payment_terms_days: z.number().min(0, 'Los días deben ser 0 o más'),
   preferred_currency: z.string().optional(),
@@ -53,6 +54,7 @@ interface Client {
   display_name: string
   legal_name: string | null
   tax_id: string | null
+  phone: string | null
   emails: string[]
   payment_terms_days: number
   preferred_currency: string | null
@@ -92,6 +94,7 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
       display_name: '',
       legal_name: '',
       tax_id: '',
+      phone: '',
       emails: [],
       payment_terms_days: 30,
       preferred_currency: 'USD',
@@ -105,6 +108,7 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
         display_name: client.display_name,
         legal_name: client.legal_name || '',
         tax_id: client.tax_id || '',
+        phone: client.phone || '',
         emails: client.emails,
         payment_terms_days: client.payment_terms_days,
         preferred_currency: client.preferred_currency || 'USD',
@@ -115,6 +119,7 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
         display_name: '',
         legal_name: '',
         tax_id: '',
+        phone: '',
         emails: [],
         payment_terms_days: 30,
         preferred_currency: 'USD',
@@ -134,12 +139,11 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
         display_name: data.display_name,
         legal_name: data.legal_name || null,
         tax_id: data.tax_id || null,
+        phone: data.phone || null,
         emails: data.emails,
         payment_terms_days: data.payment_terms_days,
         preferred_currency: data.preferred_currency || null,
         billing_notes: data.billing_notes || null,
-        // Yappy fields
-
       }
 
       if (client) {
@@ -267,6 +271,25 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
 
               <FormField
                 control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Teléfono</FormLabel>
+                    <FormControl>
+                      <Input placeholder="61234567" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      Número de teléfono para pagos Yappy (sin prefijo)
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
                 name="preferred_currency"
                 render={({ field }) => (
                   <FormItem>
@@ -289,29 +312,31 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="payment_terms_days"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Términos de Pago (días)</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        placeholder="30" 
+                        {...field}
+                        onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Número de días para el pago (0 = inmediato)
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
-            <FormField
-              control={form.control}
-              name="payment_terms_days"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Términos de Pago (días)</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number" 
-                      placeholder="30" 
-                      {...field}
-                      onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Número de días para el pago (0 = inmediato)
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+
 
             <FormField
               control={form.control}
