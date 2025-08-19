@@ -2,16 +2,16 @@ import { Badge } from '@/components/ui/badge'
 import { CheckCircle, Clock, XCircle, AlertCircle, DollarSign, RefreshCw } from 'lucide-react'
 
 interface PaymentStatusBadgeProps {
-  status: 'draft' | 'sent' | 'pending' | 'paid' | 'partial' | 'failed' | 'refunded' | 'void' | 'chargeback'
+  status: 'cotizacion' | 'sent' | 'pending' | 'paid' | 'partial' | 'failed' | 'refunded' | 'void' | 'chargeback' | 'payment_review' | 'payment_approved'
   className?: string
 }
 
 export const PaymentStatusBadge = ({ status, className }: PaymentStatusBadgeProps) => {
   const getStatusConfig = () => {
     switch (status) {
-      case 'draft':
+      case 'cotizacion':
         return {
-          label: 'Borrador',
+          label: 'Cotización',
           variant: 'secondary' as const,
           icon: Clock,
           className: 'bg-gray-100 text-gray-800 hover:bg-gray-200'
@@ -71,6 +71,20 @@ export const PaymentStatusBadge = ({ status, className }: PaymentStatusBadgeProp
           variant: 'destructive' as const,
           icon: AlertCircle,
           className: 'bg-red-100 text-red-800 hover:bg-red-200'
+        }
+      case 'payment_review':
+        return {
+          label: 'En Revisión de Pago',
+          variant: 'outline' as const,
+          icon: AlertCircle,
+          className: 'border-orange-200 bg-orange-50 text-orange-800 hover:bg-orange-100'
+        }
+      case 'payment_approved':
+        return {
+          label: 'Pago Aprobado',
+          variant: 'default' as const,
+          icon: CheckCircle,
+          className: 'bg-green-100 text-green-800 hover:bg-green-200'
         }
       default:
         return {

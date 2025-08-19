@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 
 interface Profile {
   id: string
@@ -19,6 +20,12 @@ interface Profile {
   nmi_sandbox_mode: boolean
   email_provider_api_key: string | null
   preferences: any
+  // Yappy fields
+  yappy_enabled?: boolean
+  yappy_merchant_id?: string | null
+  yappy_secret_key?: string | null
+  yappy_domain_url?: string | null
+  yappy_environment?: 'test' | 'production'
 }
 
 const currencies = [
@@ -45,6 +52,7 @@ export const Settings = () => {
   const [showNmiSecurityKey, setShowNmiSecurityKey] = useState(false)
   const [showNmiPassword, setShowNmiPassword] = useState(false)
   const [showEmailKey, setShowEmailKey] = useState(false)
+  const [showYappySecretKey, setShowYappySecretKey] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -312,6 +320,86 @@ export const Settings = () => {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">Clave API para enviar emails transaccionales</p>
+              </div>
+
+              {/* Yappy Configuration */}
+              <div className="space-y-4 p-4 border rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <h4 className="text-sm font-medium">Configuración Yappy</h4>
+                  <Switch
+                    checked={profile.yappy_enabled || false}
+                    onCheckedChange={(checked) => setProfile({ ...profile, yappy_enabled: checked })}
+                  />
+                </div>
+                
+                {(profile.yappy_enabled) && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="yappy_merchant_id">ID de Comercio Yappy *</Label>
+                        <Input
+                          id="yappy_merchant_id"
+                          value={profile.yappy_merchant_id || ''}
+                          onChange={(e) => setProfile({ ...profile, yappy_merchant_id: e.target.value })}
+                          placeholder="ID del comercio"
+                        />
+                        <p className="text-xs text-muted-foreground">ID obtenido en Yappy Comercial</p>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="yappy_environment">Ambiente</Label>
+                        <Select
+                          value={profile.yappy_environment || 'test'}
+                          onValueChange={(value) => setProfile({ ...profile, yappy_environment: value as 'test' | 'production' })}
+                        >
+                          <SelectTrigger id="yappy_environment">
+                            <SelectValue placeholder="Seleccionar ambiente" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="test">Pruebas</SelectItem>
+                            <SelectItem value="production">Producción</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">Ambiente de Yappy a utilizar</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="yappy_domain_url">URL del Dominio *</Label>
+                      <Input
+                        id="yappy_domain_url"
+                        value={profile.yappy_domain_url || ''}
+                        onChange={(e) => setProfile({ ...profile, yappy_domain_url: e.target.value })}
+                        placeholder="https://miempresa.com"
+                      />
+                      <p className="text-xs text-muted-foreground">URL configurada en Yappy Comercial</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="yappy_secret_key">Clave Secreta *</Label>
+                      <div className="relative">
+                        <Input
+                          id="yappy_secret_key"
+                          type={showYappySecretKey ? 'text' : 'password'}
+                          value={profile.yappy_secret_key || ''}
+                          onChange={(e) => setProfile({ ...profile, yappy_secret_key: e.target.value })}
+                          placeholder="Clave secreta de Yappy"
+                          className="pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3"
+                          onClick={() => setShowYappySecretKey(!showYappySecretKey)}
+                        >
+                          {showYappySecretKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Clave secreta obtenida en Yappy Comercial</p>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </CardContent>

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/use-toast'
+import { YappyPaymentButton } from '@/components/invoices/YappyPaymentButton'
 import { CreditCard, DollarSign } from 'lucide-react'
 
 interface Invoice {
@@ -543,6 +544,29 @@ export const InvoiceView = () => {
                            <DollarSign className="w-4 h-4 mr-2" />
                            Pagar con ACH
                          </Button>
+                         
+                         {/* Yappy Payment Button */}
+                         <YappyPaymentButton
+                           invoiceId={invoice.id}
+                           amount={invoice.total}
+                           currency={invoice.currency}
+                           clientId={invoice.client_id}
+                           onSuccess={() => {
+                             toast({
+                               title: 'Pago exitoso',
+                               description: 'El pago con Yappy se ha procesado correctamente',
+                             })
+                             // Reload invoice to update status
+                             loadInvoice()
+                           }}
+                           onError={(error) => {
+                             toast({
+                               title: 'Error en el pago',
+                               description: error,
+                               variant: 'destructive',
+                             })
+                           }}
+                         />
                        </div>
                      ) : (
                                              <form onSubmit={handlePayment} className="space-y-4">

@@ -58,7 +58,7 @@ interface Invoice {
   client_id: string
   issue_date: string
   due_date: string
-  status: 'draft' | 'sent' | 'pending' | 'paid' | 'partial' | 'failed' | 'refunded' | 'void' | 'chargeback'
+  status: 'cotizacion' | 'sent' | 'pending' | 'paid' | 'partial' | 'failed' | 'refunded' | 'void' | 'chargeback' | 'payment_review' | 'payment_approved'
   currency: string
   subtotal: number
   tax: number
@@ -360,7 +360,7 @@ export const InvoiceDialog = ({
       subtotal: subtotal,
       tax: totalTax,
       total: total,
-      status: 'draft' as const,
+              status: 'cotizacion' as const,
       notes: notes.trim() || null
     }
 

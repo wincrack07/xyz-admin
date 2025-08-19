@@ -12,15 +12,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { PaymentStatusBadge } from '@/components/invoices/PaymentStatusBadge'
+import { YappyPaymentButton } from '@/components/invoices/YappyPaymentButton'
 
 interface InvoiceDetail {
   id: string
   series: string
   number: number
   client_id: string
+  owner_user_id: string
   issue_date: string
   due_date: string
-  status: string
+  status: 'cotizacion' | 'sent' | 'pending' | 'paid' | 'partial' | 'failed' | 'refunded' | 'void' | 'chargeback' | 'payment_review' | 'payment_approved'
   currency: string
   subtotal: number
   tax: number
@@ -54,22 +56,22 @@ interface InvoiceDetail {
 
 interface Payment {
   id: string
-  paid_at: string
+  paid_at: string | null
   amount: number
   currency: string
-  method: string
+  method: string | null
   status: string
-  nmi_txn_id?: string
+  nmi_txn_id?: string | null
   raw_payload?: any
   created_at: string
 }
 
 interface AuditLog {
-  id: string
-  action: string
-  old_values?: any
-  new_values?: any
-  user_id: string
+  id: number
+  event: string
+  actor: string | null
+  entity: string | null
+  payload: any
   created_at: string
 }
 
@@ -137,32 +139,33 @@ export const InvoiceDetail = () => {
         series: invoiceData.series,
         number: invoiceData.number,
         client_id: invoiceData.client_id,
+        owner_user_id: invoiceData.owner_user_id,
         issue_date: invoiceData.issue_date,
         due_date: invoiceData.due_date,
-        status: invoiceData.status,
+        status: invoiceData.status as InvoiceDetail['status'],
         currency: invoiceData.currency,
         subtotal: parseFloat(invoiceData.subtotal.toString()),
         tax: parseFloat(invoiceData.tax.toString()),
         total: parseFloat(invoiceData.total.toString()),
-        payment_method: invoiceData.payment_method,
+        payment_method: invoiceData.payment_method || undefined,
         down_payment_amount: invoiceData.down_payment_amount ? parseFloat(invoiceData.down_payment_amount.toString()) : undefined,
-        ach_screenshot_url: invoiceData.ach_screenshot_url,
-        payment_review_notes: invoiceData.payment_review_notes,
-        notes: invoiceData.notes,
+        ach_screenshot_url: invoiceData.ach_screenshot_url || undefined,
+        payment_review_notes: invoiceData.payment_review_notes || undefined,
+        notes: invoiceData.notes || undefined,
         created_at: invoiceData.created_at,
         client: {
           id: invoiceData.clients.id,
           display_name: invoiceData.clients.display_name,
-          legal_name: invoiceData.clients.legal_name,
+          legal_name: invoiceData.clients.legal_name || undefined,
           emails: invoiceData.clients.emails || []
         },
         items: (itemsData || []).map(item => ({
           id: item.id,
           description: item.description,
           quantity: item.quantity,
-          unit_price: parseFloat(item.unit_price.toString()),
-          tax_rate: parseFloat(item.tax_rate.toString()),
-          total: parseFloat(item.total.toString())
+          unit_price: parseFloat((item.unit_price || 0).toString()),
+          tax_rate: parseFloat((item.tax_rate || 0).toString()),
+          total: parseFloat((item.line_total || 0).toString())
         })),
         can_edit: editability.can_edit,
         can_revert_to_cotizacion: editability.can_revert_to_cotizacion,
@@ -176,13 +179,16 @@ export const InvoiceDetail = () => {
 
       // Load payments
       const { data: paymentsData } = await supabase
-        .rpc('get_invoice_payments', { p_invoice_id: id })
+        .from('payments')
+        .select('*')
+        .eq('invoice_id', id)
+        .order('created_at', { ascending: false })
 
       if (paymentsData) {
-        const transformedPayments = (paymentsData as any[]).map(payment => ({
+        const transformedPayments = paymentsData.map(payment => ({
           id: payment.id,
           paid_at: payment.paid_at,
-          amount: parseFloat(payment.amount.toString()),
+          amount: parseFloat((payment.amount || 0).toString()),
           currency: payment.currency,
           method: payment.method,
           status: payment.status,
@@ -195,10 +201,13 @@ export const InvoiceDetail = () => {
 
       // Load audit logs
       const { data: logsData } = await supabase
-        .rpc('get_invoice_logs', { p_invoice_id: id })
+        .from('audit_logs')
+        .select('*')
+        .eq('entity', `invoice:${id}`)
+        .order('created_at', { ascending: false })
 
       if (logsData) {
-        setLogs(logsData as any[])
+        setLogs(logsData)
       }
 
     } catch (error) {
@@ -219,29 +228,40 @@ export const InvoiceDetail = () => {
     try {
       setStatusChanging(true)
 
-      const { data, error } = await supabase
-        .rpc('update_invoice_status', {
-          p_invoice_id: invoice.id,
-          p_new_status: newStatus,
-          p_notes: statusNotes || null
+      // Update invoice status directly
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update({ status: newStatus })
+        .eq('id', invoice.id)
+
+      if (updateError) throw updateError
+
+      // Log the status change
+      const { error: logError } = await supabase
+        .from('audit_logs')
+        .insert({
+          owner_user_id: invoice.owner_user_id,
+          event: 'invoice_status_changed',
+          actor: 'user:system',
+          entity: `invoice:${invoice.id}`,
+          payload: {
+            old_status: invoice.status,
+            new_status: newStatus,
+            notes: statusNotes || null
+          }
         })
 
-      if (error) throw error
-
-      if (data) {
-        toast({
-          title: 'Estado actualizado',
-          description: 'El estado de la factura se actualizó correctamente.',
-        })
-        setStatusNotes('')
-        loadInvoiceDetail() // Reload to get updated data
-      } else {
-        toast({
-          title: 'Error',
-          description: 'No se pudo actualizar el estado. Verifique las reglas de negocio.',
-          variant: 'destructive',
-        })
+      if (logError) {
+        console.error('Error logging status change:', logError)
       }
+
+      toast({
+        title: 'Estado actualizado',
+        description: 'El estado de la factura se actualizó correctamente.',
+      })
+      setStatusNotes('')
+      loadInvoiceDetail() // Reload to get updated data
+
     } catch (error) {
       console.error('Error updating status:', error)
       toast({
@@ -259,6 +279,31 @@ export const InvoiceDetail = () => {
       style: 'currency',
       currency: currency === 'USD' ? 'USD' : 'PAB'
     }).format(amount)
+  }
+
+  const formatPaymentStatus = (status: string) => {
+    const statusMap: Record<string, string> = {
+      'pending': 'Pendiente',
+      'paid': 'Pagado',
+      'partial': 'Pago Parcial',
+      'failed': 'Fallido',
+      'refunded': 'Reembolsado',
+      'void': 'Anulado',
+      'chargeback': 'Contracargo'
+    }
+    return statusMap[status] || status
+  }
+
+  const formatPaymentMethod = (method: string | null) => {
+    if (!method) return 'No especificado'
+    const methodMap: Record<string, string> = {
+      'nmi': 'Tarjeta de Crédito',
+      'ach': 'Transferencia ACH',
+      'wire': 'Transferencia Bancaria',
+      'cash': 'Efectivo',
+      'check': 'Cheque'
+    }
+    return methodMap[method] || method
   }
 
   const copyPublicLink = () => {
@@ -352,6 +397,33 @@ export const InvoiceDetail = () => {
             <FileText className="mr-2 h-4 w-4" />
             Crear Nota de Crédito
           </Button>
+        )}
+        
+        {/* Yappy Payment Button - Only show for pending invoices */}
+        {invoice.status === 'pending' && (
+          <div className="flex items-center">
+            <YappyPaymentButton
+              invoiceId={invoice.id}
+              amount={invoice.total}
+              currency={invoice.currency}
+              clientId={invoice.client_id}
+              onSuccess={() => {
+                toast({
+                  title: 'Pago exitoso',
+                  description: 'El pago con Yappy se ha procesado correctamente',
+                })
+                // Reload invoice to update status
+                loadInvoiceDetail()
+              }}
+              onError={(error) => {
+                toast({
+                  title: 'Error en el pago',
+                  description: error,
+                  variant: 'destructive',
+                })
+              }}
+            />
+          </div>
         )}
       </div>
 
@@ -535,9 +607,9 @@ export const InvoiceDetail = () => {
                         <div className="space-y-2">
                           <div className="flex items-center space-x-2">
                             <Badge variant={payment.status === 'paid' ? 'default' : payment.status === 'pending' ? 'secondary' : 'destructive'}>
-                              {payment.status}
+                              {formatPaymentStatus(payment.status)}
                             </Badge>
-                            <Badge variant="outline">{payment.method}</Badge>
+                            <Badge variant="outline">{formatPaymentMethod(payment.method)}</Badge>
                           </div>
                           <p className="text-sm text-muted-foreground">
                             <Clock className="inline mr-1 h-4 w-4" />
@@ -584,17 +656,17 @@ export const InvoiceDetail = () => {
                     <div key={log.id} className="border-l-4 border-primary pl-4 py-2">
                       <div className="flex justify-between items-start">
                         <div>
-                          <p className="font-medium">{log.action}</p>
+                          <p className="font-medium">{log.event}</p>
                           <p className="text-sm text-muted-foreground">
                             {new Date(log.created_at).toLocaleString('es-PA')}
                           </p>
                         </div>
                       </div>
-                      {log.old_values && log.new_values && (
+                      {log.payload && (
                         <div className="mt-2 text-sm">
-                          <p className="text-muted-foreground">Cambios realizados:</p>
+                          <p className="text-muted-foreground">Detalles:</p>
                           <div className="bg-muted p-2 rounded text-xs font-mono">
-                            <pre>{JSON.stringify({ old: log.old_values, new: log.new_values }, null, 2)}</pre>
+                            <pre>{JSON.stringify(log.payload, null, 2)}</pre>
                           </div>
                         </div>
                       )}
