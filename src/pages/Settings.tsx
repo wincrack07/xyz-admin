@@ -1,0 +1,313 @@
+import { useState, useEffect } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
+import { supabase } from '@/lib/supabase'
+import { Save, Eye, EyeOff } from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
+
+interface Profile {
+  id: string
+  full_name: string | null
+  company_name: string | null
+  default_currency: string
+  timezone: string
+  email_from: string | null
+  nmi_api_key: string | null
+  email_provider_api_key: string | null
+  preferences: any
+}
+
+const currencies = [
+  { code: 'USD', name: 'Dólar Estadounidense' },
+  { code: 'PAB', name: 'Balboa Panameño' },
+  { code: 'EUR', name: 'Euro' },
+  { code: 'GBP', name: 'Libra Esterlina' },
+  { code: 'CAD', name: 'Dólar Canadiense' },
+]
+
+const timezones = [
+  { value: 'America/Panama', name: 'América/Panamá (UTC-5)' },
+  { value: 'America/New_York', name: 'América/Nueva_York (UTC-5/-4)' },
+  { value: 'America/Los_Angeles', name: 'América/Los_Ángeles (UTC-8/-7)' },
+  { value: 'Europe/Madrid', name: 'Europa/Madrid (UTC+1/+2)' },
+]
+
+export const Settings = () => {
+  const { user } = useAuth()
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+  const [showNmiKey, setShowNmiKey] = useState(false)
+  const [showEmailKey, setShowEmailKey] = useState(false)
+
+  useEffect(() => {
+    if (user) {
+      loadProfile()
+    }
+  }, [user])
+
+  const loadProfile = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user?.id)
+        .single()
+
+      if (error && error.code !== 'PGRST116') {
+        throw error
+      }
+
+      if (data) {
+        setProfile(data)
+      } else {
+        // Create initial profile if it doesn't exist
+        const newProfile = {
+          id: user?.id,
+          full_name: user?.user_metadata?.full_name || '',
+          company_name: user?.user_metadata?.company_name || '',
+          default_currency: 'USD',
+          timezone: 'America/Panama',
+          email_from: user?.email || '',
+          nmi_api_key: null,
+          email_provider_api_key: null,
+          preferences: {}
+        }
+        
+        const { data: createdProfile, error: createError } = await supabase
+          .from('profiles')
+          .insert([newProfile])
+          .select()
+          .single()
+
+        if (createError) throw createError
+        setProfile(createdProfile)
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error)
+      setMessage('Error al cargar el perfil')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!profile) return
+
+    try {
+      setSaving(true)
+      setMessage('')
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: profile.full_name,
+          company_name: profile.company_name,
+          default_currency: profile.default_currency,
+          timezone: profile.timezone,
+          email_from: profile.email_from,
+          nmi_api_key: profile.nmi_api_key,
+          email_provider_api_key: profile.email_provider_api_key,
+        })
+        .eq('id', user?.id)
+
+      if (error) throw error
+
+      setMessage('Configuración guardada exitosamente')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (error) {
+      console.error('Error saving profile:', error)
+      setMessage('Error al guardar la configuración')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="animate-pulse">
+        <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
+        <div className="space-y-4">
+          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+          <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+          <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!profile) {
+    return <div>Error al cargar el perfil</div>
+  }
+
+  return (
+    <div>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold">Ajustes</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Configura tu información personal y preferencias del sistema
+        </p>
+      </div>
+
+      <form onSubmit={handleSave} className="space-y-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Información Personal</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="full_name">Nombre Completo</Label>
+                <Input
+                  id="full_name"
+                  value={profile.full_name || ''}
+                  onChange={(e) => setProfile({ ...profile, full_name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="company_name">Nombre de la Empresa</Label>
+                <Input
+                  id="company_name"
+                  value={profile.company_name || ''}
+                  onChange={(e) => setProfile({ ...profile, company_name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email_from">Email Remitente</Label>
+                <Input
+                  id="email_from"
+                  type="email"
+                  value={profile.email_from || ''}
+                  onChange={(e) => setProfile({ ...profile, email_from: e.target.value })}
+                  placeholder="noreply@tuempresa.com"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Preferencias</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="default_currency">Moneda por Defecto</Label>
+                <Select
+                  value={profile.default_currency}
+                  onValueChange={(v) => setProfile({ ...profile, default_currency: v })}
+                >
+                  <SelectTrigger id="default_currency">
+                    <SelectValue placeholder="Selecciona moneda" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencies.map((currency) => (
+                      <SelectItem key={currency.code} value={currency.code}>
+                        {currency.code} - {currency.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="timezone">Zona Horaria</Label>
+                <Select
+                  value={profile.timezone}
+                  onValueChange={(v) => setProfile({ ...profile, timezone: v })}
+                >
+                  <SelectTrigger id="timezone">
+                    <SelectValue placeholder="Selecciona zona horaria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {timezones.map((tz) => (
+                      <SelectItem key={tz.value} value={tz.value}>
+                        {tz.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Integraciones</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="nmi_api_key">NMI API Key</Label>
+                <div className="relative">
+                  <Input
+                    id="nmi_api_key"
+                    type={showNmiKey ? 'text' : 'password'}
+                    value={profile.nmi_api_key || ''}
+                    onChange={(e) => setProfile({ ...profile, nmi_api_key: e.target.value })}
+                    placeholder="Ingresa tu NMI API Key"
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => setShowNmiKey(!showNmiKey)}
+                  >
+                    {showNmiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Clave API para procesar pagos con NMI</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email_provider_api_key">Email Provider API Key (Resend/SendGrid)</Label>
+                <div className="relative">
+                  <Input
+                    id="email_provider_api_key"
+                    type={showEmailKey ? 'text' : 'password'}
+                    value={profile.email_provider_api_key || ''}
+                    onChange={(e) => setProfile({ ...profile, email_provider_api_key: e.target.value })}
+                    placeholder="Ingresa tu API Key del proveedor de email"
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => setShowEmailKey(!showEmailKey)}
+                  >
+                    {showEmailKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Clave API para enviar emails transaccionales</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {message && (
+          <Card>
+            <CardContent className={`mt-4 ${message.includes('Error') ? 'text-red-600' : 'text-green-600'}`}>
+              {message}
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="flex justify-end">
+          <Button type="submit" disabled={saving}>
+            <Save className="mr-2 h-4 w-4" /> {saving ? 'Guardando...' : 'Guardar Cambios'}
+          </Button>
+        </div>
+      </form>
+    </div>
+  )
+}
