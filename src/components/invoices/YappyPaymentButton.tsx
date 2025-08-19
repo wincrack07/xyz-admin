@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import { Smartphone } from 'lucide-react'
 
 interface YappyPaymentButtonProps {
   invoiceId: string
@@ -35,6 +34,14 @@ declare global {
   }
 }
 
+// Yappy icon component
+const YappyIcon = () => (
+  <div className="flex items-center mr-2">
+    <div className="w-4 h-4 bg-blue-500 rounded-full mr-1"></div>
+    <div className="w-4 h-4 bg-blue-500 rounded-full"></div>
+  </div>
+)
+
 export const YappyPaymentButton = ({ 
   invoiceId, 
   amount, 
@@ -46,15 +53,18 @@ export const YappyPaymentButton = ({
   const { user } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
-  const [showTestDialog, setShowTestDialog] = useState(false)
-  const [testPhoneNumber, setTestPhoneNumber] = useState('')
+  const [showPhoneDialog, setShowPhoneDialog] = useState(false)
+  const [phoneNumber, setPhoneNumber] = useState('')
   const [yappyButton, setYappyButton] = useState<any>(null)
+  const [scriptLoaded, setScriptLoaded] = useState(false)
   const buttonRef = useRef<HTMLDivElement>(null)
 
   // Load Yappy script
   useEffect(() => {
     const loadYappyScript = () => {
-      if (window.YappyButton) {
+      // Check if script is already loaded
+      if (document.querySelector('script[src*="yappy.cloud"]')) {
+        setScriptLoaded(true)
         return
       }
 
@@ -62,10 +72,11 @@ export const YappyPaymentButton = ({
       script.type = 'module'
       script.src = 'https://bt-cdn.yappy.cloud/v1/cdn/web-component-btn-yappy.js'
       script.onload = () => {
-        console.log('Yappy script loaded')
+        console.log('Yappy script loaded successfully')
+        setScriptLoaded(true)
       }
-      script.onerror = () => {
-        console.error('Failed to load Yappy script')
+      script.onerror = (error) => {
+        console.error('Failed to load Yappy script:', error)
         onError?.('Error al cargar Yappy')
       }
       document.head.appendChild(script)
@@ -74,17 +85,23 @@ export const YappyPaymentButton = ({
     loadYappyScript()
   }, [onError])
 
-  // Initialize Yappy button
+  // Initialize Yappy button when script is loaded
   useEffect(() => {
-    if (!buttonRef.current || !window.YappyButton) return
+    if (!scriptLoaded || !buttonRef.current) return
 
     const initButton = () => {
       try {
+        // Clear any existing content
+        if (buttonRef.current) {
+          buttonRef.current.innerHTML = ''
+        }
+
         // Create Yappy button element
         const btnElement = document.createElement('btn-yappy')
         btnElement.setAttribute('theme', 'blue')
         btnElement.setAttribute('rounded', 'true')
         
+        // Add to DOM
         buttonRef.current?.appendChild(btnElement)
         
         // Add event listeners
@@ -93,29 +110,25 @@ export const YappyPaymentButton = ({
         btnElement.addEventListener('eventError', handleYappyError)
         
         setYappyButton(btnElement)
+        console.log('Yappy button initialized successfully')
       } catch (error) {
         console.error('Error initializing Yappy button:', error)
         onError?.('Error al inicializar Yappy')
       }
     }
 
-    // Wait for script to load
-    const checkInterval = setInterval(() => {
-      if (window.YappyButton) {
-        clearInterval(checkInterval)
-        initButton()
-      }
-    }, 100)
+    // Wait a bit for the script to fully initialize
+    const timer = setTimeout(initButton, 500)
 
     return () => {
-      clearInterval(checkInterval)
+      clearTimeout(timer)
       if (yappyButton) {
         yappyButton.removeEventListener('eventClick', handleYappyClick)
         yappyButton.removeEventListener('eventSuccess', handleYappySuccess)
         yappyButton.removeEventListener('eventError', handleYappyError)
       }
     }
-  }, [onError])
+  }, [scriptLoaded, onError])
 
   const handleYappyClick = async () => {
     if (!user) {
@@ -126,29 +139,26 @@ export const YappyPaymentButton = ({
     try {
       setLoading(true)
 
-      // Get client Yappy configuration
-      const { data: client, error: clientError } = await supabase
-        .from('clients')
-        .select('yappy_enabled, yappy_environment')
-        .eq('id', clientId)
-        .eq('owner_user_id', user.id)
+      // Get user's Yappy configuration from profiles table
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('yappy_enabled, yappy_environment, yappy_merchant_id, yappy_domain_url, yappy_secret_key')
+        .eq('id', user.id)
         .single()
 
-      if (clientError || !client) {
-        throw new Error('Cliente no encontrado')
+      if (profileError || !profile) {
+        throw new Error('Perfil de usuario no encontrado')
       }
 
-      if (!client.yappy_enabled) {
-        throw new Error('Yappy no está habilitado para este cliente')
+      if (!profile.yappy_enabled) {
+        throw new Error('Yappy no está habilitado en tu configuración')
       }
 
-      // For test environment, show phone number dialog
-      if (client.yappy_environment === 'test') {
-        setShowTestDialog(true)
-        return
+      if (!profile.yappy_merchant_id || !profile.yappy_domain_url || !profile.yappy_secret_key) {
+        throw new Error('Configuración de Yappy incompleta. Ve a Configuración > Integraciones')
       }
 
-      // For production, create order directly
+      // Create order (test environment will use default phone number)
       await createYappyOrder()
     } catch (error: any) {
       console.error('Error in Yappy click:', error)
@@ -160,34 +170,33 @@ export const YappyPaymentButton = ({
 
   const createYappyOrder = async (aliasYappy?: string) => {
     try {
-      const response = await fetch('/api/yappy-create-order', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
-        },
-        body: JSON.stringify({
+      // Call the edge function to create Yappy order
+      const { data, error } = await supabase.functions.invoke('yappy-create-order', {
+        body: {
           invoiceId,
           aliasYappy
-        })
+        }
       })
 
-      const result: YappyOrderResponse = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.status?.description || 'Error al crear orden')
+      if (error) {
+        // Check if phone number is required
+        if (error.code === 'YAPPY-PHONE-REQUIRED' || (error as any).needsPhone) {
+          setShowPhoneDialog(true)
+          return
+        }
+        throw new Error(error.message || 'Error al crear orden')
       }
 
-      if (!result.body?.transactionId || !result.body?.token || !result.body?.documentName) {
+      if (!data || !data.body?.transactionId || !data.body?.token || !data.body?.documentName) {
         throw new Error('Respuesta inválida de Yappy')
       }
 
       // Trigger Yappy payment
       if (yappyButton && yappyButton.eventPayment) {
         yappyButton.eventPayment({
-          transactionId: result.body.transactionId,
-          token: result.body.token,
-          documentName: result.body.documentName
+          transactionId: data.body.transactionId,
+          token: data.body.token,
+          documentName: data.body.documentName
         })
       }
 
@@ -217,8 +226,8 @@ export const YappyPaymentButton = ({
     onError?.(errorMessage)
   }
 
-  const handleTestPayment = async () => {
-    if (!testPhoneNumber) {
+  const handlePhonePayment = async () => {
+    if (!phoneNumber) {
       toast({
         title: 'Error',
         description: 'Por favor ingresa un número de teléfono',
@@ -227,51 +236,62 @@ export const YappyPaymentButton = ({
       return
     }
 
-    setShowTestDialog(false)
-    await createYappyOrder(testPhoneNumber)
+    setShowPhoneDialog(false)
+    await createYappyOrder(phoneNumber)
   }
 
   return (
     <>
-      <div className="space-y-2">
-        <Label>Pagar con Yappy</Label>
-        <div ref={buttonRef} className="flex justify-center">
-          {/* Yappy button will be inserted here */}
-        </div>
-        {loading && (
-          <p className="text-sm text-muted-foreground text-center">
-            Procesando pago...
-          </p>
+      <Button 
+        onClick={handleYappyClick}
+        disabled={loading || !scriptLoaded}
+        className="w-full"
+        variant="outline"
+        size="lg"
+      >
+        <YappyIcon />
+        {loading ? 'Procesando...' : 'Pagar con Yappy'}
+      </Button>
+
+      {/* Hidden div for Yappy script to inject the custom button */}
+      <div ref={buttonRef} className="hidden">
+        {!scriptLoaded && (
+          <div className="flex items-center justify-center text-sm text-muted-foreground">
+            Cargando Yappy...
+          </div>
         )}
       </div>
 
-      {/* Test Phone Number Dialog */}
-      <Dialog open={showTestDialog} onOpenChange={setShowTestDialog}>
+      {/* Phone Number Dialog */}
+      <Dialog open={showPhoneDialog} onOpenChange={setShowPhoneDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Número de Teléfono de Prueba</DialogTitle>
+            <DialogTitle>Número de Teléfono para Yappy</DialogTitle>
             <DialogDescription>
-              Para el ambiente de pruebas, ingresa un número de teléfono panameño registrado en Yappy
+              Ingresa el número de teléfono del cliente para procesar el pago con Yappy
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="testPhone">Número de Teléfono</Label>
+              <Label htmlFor="clientPhone">Número de Teléfono</Label>
               <Input
-                id="testPhone"
+                id="clientPhone"
                 type="tel"
                 placeholder="61234567"
-                value={testPhoneNumber}
-                onChange={(e) => setTestPhoneNumber(e.target.value)}
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                Número de teléfono panameño registrado en Yappy (sin prefijo)
+              </p>
             </div>
             <div className="flex gap-2">
-              <Button onClick={handleTestPayment} className="flex-1">
+              <Button onClick={handlePhonePayment} className="flex-1">
                 Continuar
               </Button>
               <Button 
                 variant="outline" 
-                onClick={() => setShowTestDialog(false)}
+                onClick={() => setShowPhoneDialog(false)}
                 className="flex-1"
               >
                 Cancelar

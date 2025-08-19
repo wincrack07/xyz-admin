@@ -671,6 +671,11 @@ export type Database = {
           nmi_security_key: string | null
           preferences: Json | null
           timezone: string
+          yappy_enabled: boolean | null
+          yappy_merchant_id: string | null
+          yappy_secret_key: string | null
+          yappy_domain_url: string | null
+          yappy_environment: string | null
         }
         Insert: {
           company_name?: string | null
@@ -685,6 +690,11 @@ export type Database = {
           nmi_security_key?: string | null
           preferences?: Json | null
           timezone?: string
+          yappy_enabled?: boolean | null
+          yappy_merchant_id?: string | null
+          yappy_secret_key?: string | null
+          yappy_domain_url?: string | null
+          yappy_environment?: string | null
         }
         Update: {
           company_name?: string | null

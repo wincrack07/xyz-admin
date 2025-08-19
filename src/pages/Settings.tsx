@@ -87,7 +87,13 @@ export const Settings = () => {
           nmi_security_key: null,
           nmi_sandbox_mode: true,
           email_provider_api_key: null,
-          preferences: {}
+          preferences: {},
+          // Yappy fields with default values
+          yappy_enabled: false,
+          yappy_merchant_id: null,
+          yappy_secret_key: null,
+          yappy_domain_url: null,
+          yappy_environment: 'test'
         }
         
         const { data: createdProfile, error: createError } = await supabase
@@ -126,6 +132,12 @@ export const Settings = () => {
           nmi_security_key: profile.nmi_security_key,
           nmi_sandbox_mode: profile.nmi_sandbox_mode,
           email_provider_api_key: profile.email_provider_api_key,
+          // Yappy fields
+          yappy_enabled: profile.yappy_enabled,
+          yappy_merchant_id: profile.yappy_merchant_id,
+          yappy_secret_key: profile.yappy_secret_key,
+          yappy_domain_url: profile.yappy_domain_url,
+          yappy_environment: profile.yappy_environment,
         })
         .eq('id', user?.id!)
 

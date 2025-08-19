@@ -32,7 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Switch } from '@/components/ui/switch'
+
 import { X, Plus } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -44,12 +44,6 @@ const clientSchema = z.object({
   payment_terms_days: z.number().min(0, 'Los días deben ser 0 o más'),
   preferred_currency: z.string().optional(),
   billing_notes: z.string().optional(),
-  // Yappy fields
-  yappy_enabled: z.boolean().default(false),
-  yappy_merchant_id: z.string().optional(),
-  yappy_secret_key: z.string().optional(),
-  yappy_domain_url: z.string().optional(),
-  yappy_environment: z.enum(['test', 'production']).default('test'),
 })
 
 type ClientFormData = z.infer<typeof clientSchema>
@@ -102,11 +96,6 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
       payment_terms_days: 30,
       preferred_currency: 'USD',
       billing_notes: '',
-      yappy_enabled: false,
-      yappy_merchant_id: '',
-      yappy_secret_key: '',
-      yappy_domain_url: '',
-      yappy_environment: 'test',
     },
   })
 
@@ -117,11 +106,6 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
         legal_name: client.legal_name || '',
         tax_id: client.tax_id || '',
         emails: client.emails,
-        yappy_enabled: client.yappy_enabled || false,
-        yappy_merchant_id: client.yappy_merchant_id || '',
-        yappy_secret_key: client.yappy_secret_key || '',
-        yappy_domain_url: client.yappy_domain_url || '',
-        yappy_environment: client.yappy_environment || 'test',
         payment_terms_days: client.payment_terms_days,
         preferred_currency: client.preferred_currency || 'USD',
         billing_notes: client.billing_notes || '',
@@ -130,11 +114,6 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
       form.reset({
         display_name: '',
         legal_name: '',
-        yappy_enabled: false,
-        yappy_merchant_id: '',
-        yappy_secret_key: '',
-        yappy_domain_url: '',
-        yappy_environment: 'test',
         tax_id: '',
         emails: [],
         payment_terms_days: 30,
@@ -160,11 +139,7 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
         preferred_currency: data.preferred_currency || null,
         billing_notes: data.billing_notes || null,
         // Yappy fields
-        yappy_enabled: data.yappy_enabled,
-        yappy_merchant_id: data.yappy_merchant_id || null,
-        yappy_secret_key: data.yappy_secret_key || null,
-        yappy_domain_url: data.yappy_domain_url || null,
-        yappy_environment: data.yappy_environment,
+
       }
 
       if (client) {
@@ -195,11 +170,11 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
       }
 
       onSaved()
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error saving client:', error)
       toast({
         title: 'Error',
-        description: error.message || 'Ocurrió un error al guardar el cliente.',
+        description: error instanceof Error ? error.message : 'Ocurrió un error al guardar el cliente.',
         variant: 'destructive',
       })
     } finally {
@@ -392,117 +367,7 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
               )}
             />
 
-            {/* Yappy Payment Configuration */}
-            <div className="space-y-4 p-4 border rounded-lg">
-              <h3 className="text-lg font-semibold">Configuración Yappy</h3>
-              
-              <FormField
-                control={form.control}
-                name="yappy_enabled"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3">
-                    <div className="space-y-0.5">
-                      <FormLabel>Habilitar Yappy</FormLabel>
-                      <FormDescription>
-                        Permitir pagos con Yappy para este cliente
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
 
-              {form.watch('yappy_enabled') && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="yappy_merchant_id"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>ID de Comercio Yappy *</FormLabel>
-                          <FormControl>
-                            <Input placeholder="ID del comercio" {...field} />
-                          </FormControl>
-                          <FormDescription>
-                            ID obtenido en Yappy Comercial
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="yappy_environment"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Ambiente</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar ambiente" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="test">Pruebas</SelectItem>
-                              <SelectItem value="production">Producción</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <FormField
-                    control={form.control}
-                    name="yappy_domain_url"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>URL del Dominio *</FormLabel>
-                        <FormControl>
-                          <Input 
-                            placeholder="https://miempresa.com" 
-                            {...field} 
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          URL configurada en Yappy Comercial
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="yappy_secret_key"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Clave Secreta *</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="password"
-                            placeholder="Clave secreta de Yappy" 
-                            {...field} 
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Clave secreta obtenida en Yappy Comercial
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </>
-              )}
-            </div>
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

@@ -74,11 +74,10 @@ serve(async (req) => {
       .from('invoices')
       .select(`
         *,
-        clients!inner(
-          yappy_merchant_id,
-          yappy_domain_url,
-          yappy_environment,
-          yappy_enabled
+        client:clients(
+          id,
+          display_name,
+          phone
         )
       `)
       .eq('id', invoiceId)
@@ -95,11 +94,26 @@ serve(async (req) => {
       )
     }
 
-    const client = invoice.clients
+    // Get user's Yappy configuration from profiles
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('yappy_enabled, yappy_merchant_id, yappy_domain_url, yappy_environment, yappy_secret_key')
+      .eq('id', user.id)
+      .single()
 
-    if (!client.yappy_enabled || !client.yappy_merchant_id || !client.yappy_domain_url) {
+    if (profileError || !profile) {
       return new Response(
-        JSON.stringify({ error: 'Yappy not configured for this client' }),
+        JSON.stringify({ error: 'User profile not found' }),
+        { 
+          status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
+    if (!profile.yappy_enabled || !profile.yappy_merchant_id || !profile.yappy_domain_url || !profile.yappy_secret_key) {
+      return new Response(
+        JSON.stringify({ error: 'Yappy not configured. Please configure Yappy in Settings > Integrations' }),
         { 
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -108,7 +122,7 @@ serve(async (req) => {
     }
 
     // First, validate merchant (get token)
-    const baseUrl = client.yappy_environment === 'production' 
+    const baseUrl = profile.yappy_environment === 'production' 
       ? 'https://apipagosbg.bgeneral.cloud'
       : 'https://api-comecom-uat.yappycloud.com'
 
@@ -118,8 +132,8 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        merchantId: client.yappy_merchant_id,
-        urlDomain: client.yappy_domain_url
+        merchantId: profile.yappy_merchant_id,
+        urlDomain: profile.yappy_domain_url
       })
     })
 
@@ -144,11 +158,30 @@ serve(async (req) => {
     // Create IPN URL - this will be the webhook endpoint
     const ipnUrl = `${supabaseUrl.replace('/rest/v1', '')}/functions/v1/yappy-webhook`
 
+    // Validate required invoice fields
+    if (!invoice.tax || !invoice.subtotal || !invoice.total) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invoice missing required fields: tax, subtotal, or total',
+          invoice: {
+            id: invoice.id,
+            tax: invoice.tax,
+            subtotal: invoice.subtotal,
+            total: invoice.total
+          }
+        }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+
     // Prepare order data
-    const orderData = {
-      merchantId: client.yappy_merchant_id,
+    const orderData: any = {
+      merchantId: profile.yappy_merchant_id,
       orderId: orderId,
-      domain: client.yappy_domain_url,
+      domain: profile.yappy_domain_url,
       paymentDate: Math.floor(Date.now() / 1000), // epoch time
       ipnUrl: ipnUrl,
       discount: "0.00",
@@ -157,10 +190,34 @@ serve(async (req) => {
       total: invoice.total.toFixed(2)
     }
 
-    // Add aliasYappy for test environment
-    if (client.yappy_environment === 'test' && aliasYappy) {
-      orderData.aliasYappy = aliasYappy
+    // Debug: Log the order data being sent
+    console.log('Yappy order data being sent:', JSON.stringify(orderData, null, 2))
+    console.log('Invoice data:', JSON.stringify({
+      id: invoice.id,
+      tax: invoice.tax,
+      subtotal: invoice.subtotal,
+      total: invoice.total,
+      series: invoice.series,
+      number: invoice.number
+    }, null, 2))
+
+    // Add aliasYappy using client's phone number or provided number
+    const clientPhone = invoice.client?.phone
+    if (!clientPhone && !aliasYappy) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Client phone number is required for Yappy payments. Please add phone number to client or provide it manually.',
+          code: 'YAPPY-PHONE-REQUIRED',
+          needsPhone: true
+        }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
     }
+    
+    orderData.aliasYappy = aliasYappy || clientPhone
 
     // Create Yappy order
     const orderResponse = await fetch(`${baseUrl}/payments/payment-wc`, {
@@ -196,7 +253,7 @@ serve(async (req) => {
           transaction_id: orderResult.body.transactionId,
           total: invoice.total,
           currency: invoice.currency,
-          environment: client.yappy_environment
+          environment: profile.yappy_environment
         }
       })
     }
@@ -209,7 +266,7 @@ serve(async (req) => {
       }
     )
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in yappy-create-order:', error)
     
     return new Response(
