@@ -551,6 +551,8 @@ export const InvoiceView = () => {
                            amount={invoice.total}
                            currency={invoice.currency}
                            clientId={invoice.client_id}
+                           invoiceStatus={invoice.status}
+                           totalPaid={invoice.total_paid || 0}
                            onSuccess={() => {
                              toast({
                                title: 'Pago exitoso',

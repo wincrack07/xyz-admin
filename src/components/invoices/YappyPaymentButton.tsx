@@ -12,6 +12,8 @@ interface YappyPaymentButtonProps {
   amount: number
   currency: string
   clientId: string
+  invoiceStatus?: string
+  totalPaid?: number
   onSuccess?: () => void
   onError?: (error: string) => void
 }
@@ -47,6 +49,8 @@ export const YappyPaymentButton = ({
   amount, 
   currency, 
   clientId,
+  invoiceStatus,
+  totalPaid = 0,
   onSuccess,
   onError 
 }: YappyPaymentButtonProps) => {
@@ -133,6 +137,18 @@ export const YappyPaymentButton = ({
   const handleYappyClick = async () => {
     if (!user) {
       onError?.('Usuario no autenticado')
+      return
+    }
+
+    // Check if invoice is already paid
+    if (invoiceStatus === 'paid') {
+      onError?.('Esta factura ya está pagada completamente')
+      return
+    }
+
+    // Check if invoice is partially paid and remaining amount is 0
+    if (invoiceStatus === 'partial' && totalPaid >= amount) {
+      onError?.('Esta factura ya está pagada completamente')
       return
     }
 
@@ -240,17 +256,20 @@ export const YappyPaymentButton = ({
     await createYappyOrder(phoneNumber)
   }
 
+  // Check if invoice is already paid
+  const isPaid = invoiceStatus === 'paid' || (invoiceStatus === 'partial' && totalPaid >= amount)
+
   return (
     <>
       <Button 
         onClick={handleYappyClick}
-        disabled={loading || !scriptLoaded}
+        disabled={loading || !scriptLoaded || isPaid}
         className="w-full"
-        variant="outline"
+        variant={isPaid ? "secondary" : "outline"}
         size="lg"
       >
         <YappyIcon />
-        {loading ? 'Procesando...' : 'Pagar con Yappy'}
+        {loading ? 'Procesando...' : isPaid ? 'Ya Pagado' : 'Pagar con Yappy'}
       </Button>
 
       {/* Hidden div for Yappy script to inject the custom button */}

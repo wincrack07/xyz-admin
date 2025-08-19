@@ -317,11 +317,7 @@ export const InvoiceDialog = ({
 
       if (invoice) {
         // Update existing invoice
-        // TODO: Implement update logic
-        toast({
-          title: 'Funcionalidad pendiente',
-          description: 'La edición de facturas se implementará próximamente.',
-        })
+        await updateInvoice()
       } else {
         // Create new invoice
         await createInvoice()
@@ -397,6 +393,62 @@ export const InvoiceDialog = ({
     onSuccess()
     onOpenChange(false)
     resetForm()
+  }
+
+  const updateInvoice = async () => {
+    if (!invoice) return
+
+    // Update invoice
+    const invoiceData = {
+      client_id: selectedClientId,
+      issue_date: issueDate,
+      due_date: dueDate,
+      currency: currency,
+      subtotal: subtotal,
+      tax: totalTax,
+      total: total,
+      notes: notes.trim() || null
+    }
+
+    const { error: invoiceError } = await supabase
+      .from('invoices')
+      .update(invoiceData)
+      .eq('id', invoice.id)
+
+    if (invoiceError) throw invoiceError
+
+    // Delete existing invoice items
+    const { error: deleteItemsError } = await supabase
+      .from('invoice_items')
+      .delete()
+      .eq('invoice_id', invoice.id)
+
+    if (deleteItemsError) throw deleteItemsError
+
+    // Create new invoice items
+    const itemsData = items.map(item => ({
+      invoice_id: invoice.id,
+      owner_user_id: user!.id,
+      description: item.description,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      tax_rate: item.tax_rate,
+      line_total: item.line_total
+    }))
+
+    const { error: itemsError } = await supabase
+      .from('invoice_items')
+      .insert(itemsData)
+
+    if (itemsError) throw itemsError
+
+    toast({
+      title: 'Éxito',
+      description: `Factura ${invoice.series}-${invoice.number.toString().padStart(4, '0')} actualizada correctamente.`,
+    })
+
+    onSuccess()
+    onOpenChange(false)
   }
 
   const handleClose = () => {

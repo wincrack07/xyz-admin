@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { PaymentStatusBadge } from '@/components/invoices/PaymentStatusBadge'
 import { YappyPaymentButton } from '@/components/invoices/YappyPaymentButton'
+import { InvoiceDialog } from '@/components/invoices/InvoiceDialog'
 
 interface InvoiceDetail {
   id: string
@@ -88,6 +89,7 @@ export const InvoiceDetail = () => {
   const [statusChanging, setStatusChanging] = useState(false)
   const [newStatus, setNewStatus] = useState<string>('')
   const [statusNotes, setStatusNotes] = useState('')
+  const [showEditDialog, setShowEditDialog] = useState(false)
 
   const loadInvoiceDetail = async () => {
     if (!user || !id) return
@@ -374,7 +376,11 @@ export const InvoiceDetail = () => {
         <div className="flex items-center space-x-2">
           <PaymentStatusBadge status={invoice.status as any} />
           {invoice.can_edit && (
-            <Button variant="outline" size="sm">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => setShowEditDialog(true)}
+            >
               <Edit className="mr-2 h-4 w-4" />
               Editar
             </Button>
@@ -399,14 +405,16 @@ export const InvoiceDetail = () => {
           </Button>
         )}
         
-        {/* Yappy Payment Button - Only show for pending invoices */}
-        {invoice.status === 'pending' && (
+        {/* Yappy Payment Button - Show for pending and partial invoices */}
+        {(invoice.status === 'pending' || invoice.status === 'partial') && (
           <div className="flex items-center">
             <YappyPaymentButton
               invoiceId={invoice.id}
               amount={invoice.total}
               currency={invoice.currency}
               clientId={invoice.client_id}
+              invoiceStatus={invoice.status}
+              totalPaid={invoice.total_paid || 0}
               onSuccess={() => {
                 toast({
                   title: 'Pago exitoso',
@@ -784,6 +792,17 @@ export const InvoiceDetail = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Invoice Dialog */}
+      <InvoiceDialog
+        invoice={invoice}
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        onSuccess={() => {
+          loadInvoiceDetail()
+          setShowEditDialog(false)
+        }}
+      />
     </div>
   )
 }
