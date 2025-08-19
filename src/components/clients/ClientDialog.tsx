@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
 import { X, Plus } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -43,6 +44,12 @@ const clientSchema = z.object({
   payment_terms_days: z.number().min(0, 'Los días deben ser 0 o más'),
   preferred_currency: z.string().optional(),
   billing_notes: z.string().optional(),
+  // Yappy fields
+  yappy_enabled: z.boolean().default(false),
+  yappy_merchant_id: z.string().optional(),
+  yappy_secret_key: z.string().optional(),
+  yappy_domain_url: z.string().optional(),
+  yappy_environment: z.enum(['test', 'production']).default('test'),
 })
 
 type ClientFormData = z.infer<typeof clientSchema>
@@ -57,6 +64,12 @@ interface Client {
   preferred_currency: string | null
   billing_notes: string | null
   created_at: string
+  // Yappy fields
+  yappy_enabled?: boolean
+  yappy_merchant_id?: string | null
+  yappy_secret_key?: string | null
+  yappy_domain_url?: string | null
+  yappy_environment?: 'test' | 'production'
 }
 
 interface ClientDialogProps {
@@ -89,6 +102,11 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
       payment_terms_days: 30,
       preferred_currency: 'USD',
       billing_notes: '',
+      yappy_enabled: false,
+      yappy_merchant_id: '',
+      yappy_secret_key: '',
+      yappy_domain_url: '',
+      yappy_environment: 'test',
     },
   })
 
@@ -99,6 +117,11 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
         legal_name: client.legal_name || '',
         tax_id: client.tax_id || '',
         emails: client.emails,
+        yappy_enabled: client.yappy_enabled || false,
+        yappy_merchant_id: client.yappy_merchant_id || ',
+        yappy_secret_key: client.yappy_secret_key || ',
+        yappy_domain_url: client.yappy_domain_url || ',
+        yappy_environment: client.yappy_environment || 'test',
         payment_terms_days: client.payment_terms_days,
         preferred_currency: client.preferred_currency || 'USD',
         billing_notes: client.billing_notes || '',
@@ -107,6 +130,11 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
       form.reset({
         display_name: '',
         legal_name: '',
+        yappy_enabled: false,
+        yappy_merchant_id: ',
+        yappy_secret_key: ',
+        yappy_domain_url: ',
+        yappy_environment: 'test',
         tax_id: '',
         emails: [],
         payment_terms_days: 30,
@@ -131,6 +159,12 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
         payment_terms_days: data.payment_terms_days,
         preferred_currency: data.preferred_currency || null,
         billing_notes: data.billing_notes || null,
+        // Yappy fields
+        yappy_enabled: data.yappy_enabled,
+        yappy_merchant_id: data.yappy_merchant_id || null,
+        yappy_secret_key: data.yappy_secret_key || null,
+        yappy_domain_url: data.yappy_domain_url || null,
+        yappy_environment: data.yappy_environment,
       }
 
       if (client) {
@@ -357,6 +391,10 @@ export const ClientDialog = ({ client, open, onOpenChange, onSaved }: ClientDial
                 </FormItem>
               )}
             />
+
+            {/* Yappy Payment Configuration */}
+            <div className="space-y-4 p-4 border rounded-lg">
+              <h3 className="text-lg font-semibold">Configuración Yappy</h3>
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
